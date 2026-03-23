@@ -2,7 +2,7 @@
 
 client_id = "a6a2b24e5b02cc9542f4bfe78e5017dc"
 name = "wishlink-postback-app"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://wishlink-postback-app.vercel.app"
 embedded = true
 
 [build]
@@ -28,4 +28,4 @@ api_version = "2026-04"
 scopes = "read_orders"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://wishlink-postback-app.vercel.app/api/auth" ]

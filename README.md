@@ -105,13 +105,17 @@ Set `DEBUG=1` in `.env` to log full webhook payloads.
 
 ## Deploy
 
-### Deploy to Shopify
+### Deploy to Vercel (recommended)
+
+See **[DEPLOY_VERCEL.md](./DEPLOY_VERCEL.md)** for step-by-step instructions. Uses Vercel + Neon (free tier).
+
+### Deploy Shopify config
+
+After your app is live:
 
 ```bash
 shopify app deploy
 ```
-
-Deploy your app URL to a hosting provider (Fly.io, Heroku, Railway, etc.) and set `SHOPIFY_APP_URL` to your production URL.
 
 ### Production environment variables
 
