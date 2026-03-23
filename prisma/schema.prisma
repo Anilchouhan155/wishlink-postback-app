@@ -37,3 +37,19 @@ model PostbackLog {
   responseStatus Int?
   createdAt      DateTime @default(now())
 }
+
+model Order {
+  id             String   @id @default(cuid())
+  orderId       String   @unique
+  shop          String
+  orderName     String?
+  totalPrice    String
+  currency      String
+  customerEmail String?
+  wishlinkSent  Boolean  @default(false)
+  attributionData Json?  // Full tracking params (creator/affiliate journey)
+  createdAt      DateTime @default(now())
+
+  @@index([shop])
+  @@index([createdAt])
+}

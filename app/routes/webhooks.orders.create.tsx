@@ -1,17 +1,22 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { extractOrderData } from "../utils/order-extractor.server";
+import {
+  extractOrderData,
+  hasWishlinkTracking,
+} from "../utils/order-extractor.server";
 import { getEnv } from "../utils/env.server";
 import { firePostback } from "../services/postback.server";
 import {
   isPostbackAlreadySent,
   recordPostbackAttempt,
 } from "../services/idempotency.server";
+import { saveOrderForDashboard } from "../services/order-storage.server";
 import { logger } from "../utils/logger.server";
 
 /**
  * Webhook handler for orders/create
- * Receives order data from Shopify and triggers Wishlink postback
+ * CHANNEL 1 (App Dashboard): Always save order for display in app
+ * CHANNEL 2 (Wishlink): Fire postback only when order has Wishlink tracking (atgSessionId, utm_campaign, clickid)
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
@@ -34,7 +39,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Only handle ORDERS_CREATE (Shopify uses SCREAMING_SNAKE_CASE for topics)
   if (topic !== "ORDERS_CREATE") {
     logger.debug("Ignoring non-orders webhook", { topic });
     return new Response();
@@ -45,16 +49,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     orderId: payload?.id,
   });
 
-  // Log full payload for debugging (can be verbose in production)
-  if (process.env.DEBUG) {
-    logger.debug("Full webhook payload", { payload });
-  }
-
   const order = payload as {
     id?: number;
+    name?: string;
     total_price?: string;
     currency?: string;
+    email?: string;
     transactions?: Array<{ id: number }>;
+    note_attributes?: Array<{ name: string; value: string }>;
   };
 
   if (!order?.id) {
@@ -64,37 +66,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const orderId = String(order.id);
 
-  // Idempotency check - avoid duplicate postbacks
-  const alreadySent = await isPostbackAlreadySent(orderId, shop);
-  if (alreadySent) {
-    return new Response();
+  // CHANNEL 1: Always save order for app dashboard
+  let wishlinkSent = false;
+
+  // CHANNEL 2: Wishlink postback only when order has tracking params
+  if (hasWishlinkTracking(order)) {
+    const alreadySent = await isPostbackAlreadySent(orderId, shop);
+    if (!alreadySent) {
+      const env = getEnv();
+      const postbackData = extractOrderData(order, {
+        goalId: env.goalId,
+        campaignId: env.campaignId,
+        creativeId: env.creativeId,
+      });
+
+      logger.info("Firing Wishlink postback", { postbackData });
+      const result = await firePostback(postbackData);
+      wishlinkSent = result.success;
+
+      await recordPostbackAttempt(
+        orderId,
+        shop,
+        result.url,
+        result.success ? "success" : "failed",
+        result.statusCode,
+      );
+    } else {
+      wishlinkSent = true; // Already sent in a previous attempt
+    }
+  } else {
+    logger.debug("Order has no Wishlink tracking, skipping postback", {
+      orderId,
+    });
   }
 
-  const env = getEnv();
-  const postbackData = extractOrderData(order, {
-    goalId: env.goalId,
-    campaignId: env.campaignId,
-    creativeId: env.creativeId,
-  });
-
-  logger.info("Constructed postback data", { postbackData });
-
-  const result = await firePostback(postbackData);
-
-  logger.info("Postback result", {
-    success: result.success,
-    statusCode: result.statusCode,
-    url: result.url,
-    error: result.error,
-  });
-
-  await recordPostbackAttempt(
-    orderId,
-    shop,
-    result.url,
-    result.success ? "success" : "failed",
-    result.statusCode,
-  );
+  await saveOrderForDashboard(orderId, shop, order, wishlinkSent);
 
   return new Response();
 };

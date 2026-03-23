@@ -19,7 +19,7 @@ export function buildPostbackUrl(data: OrderPostbackData): string {
   const path = "/postback";
 
   const params = new URLSearchParams();
-  params.set("clickid", data.order_id);
+  params.set("clickid", data.click_id);
   params.set("transaction_id", data.transaction_id);
   params.set("payout", data.amount);
   params.set("currency", data.currency);
